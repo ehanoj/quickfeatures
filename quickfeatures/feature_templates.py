@@ -53,6 +53,13 @@ class FeatureTemplate(QObject):
 
         return self.name
 
+    def log_id(self) -> str:
+        # A short, always-unique identifier for log messages, since templates
+        # are often left unnamed ('None') which makes plain log output
+        # impossible to tell apart between rows.
+        name = self.name if self.name else "unnamed"
+        return f"{name}|layer={self.map_lyr_name()}|#{id(self) % 10000}"
+
     def set_name(self, name) -> bool:
 
         if name is None:
@@ -102,24 +109,22 @@ class FeatureTemplate(QObject):
 
     def check_validity(self) -> bool:
 
-        valid = True
+        self.set_validity(self.map_lyr is not None and not self.has_attribute_mismatch())
+
+        return self.is_valid()
+
+    def has_attribute_mismatch(self) -> bool:
+        # True only when a layer IS assigned but its fields no longer match
+        # the fields this template has default values for (e.g. a field was
+        # renamed/removed). A template with no layer assigned at all is not
+        # a "mismatch" - it's simply not configured yet.
         if self.map_lyr is None:
-            #QgsMessageLog.logMessage(f"Feature template '{self.get_name()}' invalid: no Map layer", tag=__title__, level=Qgis.Warning)
-            valid = False
-        else:
+            return False
 
-            # Check if all default value names exist within map layer
-            map_field_names = [field.name() for field in self.map_lyr.fields().toList()]
-            default_value_field_names = [key for key in self.default_values]
-            all_names_valid = all([item in map_field_names for item in default_value_field_names])
+        map_field_names = [field.name() for field in self.map_lyr.fields().toList()]
+        default_value_field_names = [key for key in self.default_values]
 
-            if not all_names_valid:
-                #QgsMessageLog.logMessage(f"Feature template '{self.get_name()}' invalid: did not have correct attribute fields", tag=__title__, level=Qgis.Warning)
-                valid = False
-
-        self.set_validity(valid)
-
-        return valid
+        return not all(item in map_field_names for item in default_value_field_names)
 
     def set_validity(self, value):
 
@@ -144,7 +149,6 @@ class FeatureTemplate(QObject):
 
         if value:
             if not self.is_active() and self.is_valid():
-                # QgsMessageLog.logMessage(f"Activated template '{self.name}'", tag=__title__, level=Qgis.Info)
 
                 # Emit signal
                 self.beginActivation.emit()
@@ -166,11 +170,18 @@ class FeatureTemplate(QObject):
                 iface.setActiveLayer(map_lyr)
                 if not map_lyr.isEditable():
                     map_lyr.startEditing()
-                iface.actionAddFeature().trigger()
+
+                # 'actionAddFeature' is a checkable action: if it is already
+                # checked (e.g. the user switched templates mid-digitizing),
+                # calling trigger() again would toggle it OFF instead of
+                # (re)starting capture on the new layer. Only trigger it when
+                # it isn't already active.
+                add_feature_action = iface.actionAddFeature()
+                if not add_feature_action.isChecked():
+                    add_feature_action.trigger()
 
         else:
             if self.active:
-                # QgsMessageLog.logMessage(f"Deactivated template '{self.name}'", tag=__title__, level=Qgis.Info)
 
                 # Revert default value definitions and form suppression settings
                 self.set_lyr_default_definitions(self.revert_values)
@@ -241,21 +252,27 @@ class FeatureTemplate(QObject):
 
     def set_lyr_default_definitions(self, default_values: Dict[str, QgsDefaultValue]) -> None:
 
-        field_ids = [get_field_id(self.map_lyr, field_name) for field_name in default_values]
-        def_values = [default_values[field_name] for field_name in default_values]
-
-        for i in range(len(default_values)):
-            self.map_lyr.setDefaultValueDefinition(field_ids[i], def_values[i])
+        for field_name, def_value in default_values.items():
+            try:
+                field_id = get_field_id(self.map_lyr, field_name)
+                self.map_lyr.setDefaultValueDefinition(field_id, def_value)
+            except Exception as e:
+                QgsMessageLog.logMessage(
+                    f"[{self.log_id()}] could not set default value for field '{field_name}': {e}",
+                    tag=__title__, level=Qgis.Warning)
 
     def get_lyr_default_definitions(self) -> dict:
 
-        field_names = [field_name for field_name in self.default_values]
-
-        field_ids = [get_field_id(self.map_lyr, field_name) for field_name in field_names]
         default_values = {}
 
-        for i in range(len(field_ids)):
-            default_values[field_names[i]] = self.map_lyr.defaultValueDefinition(field_ids[i])
+        for field_name in self.default_values:
+            try:
+                field_id = get_field_id(self.map_lyr, field_name)
+                default_values[field_name] = self.map_lyr.defaultValueDefinition(field_id)
+            except Exception as e:
+                QgsMessageLog.logMessage(
+                    f"[{self.log_id()}] could not read current default value for field '{field_name}': {e}",
+                    tag=__title__, level=Qgis.Warning)
 
         return default_values
 

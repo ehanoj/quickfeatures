@@ -13,7 +13,7 @@ from qgis.core import QgsMessageLog, QgsProject, Qgis, QgsApplication, QgsSettin
 from qgis.PyQt import uic
 from qgis.PyQt.QtCore import QSize
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QWidget, QHeaderView, QFileDialog, QPushButton, QToolBar, QAction
+from qgis.PyQt.QtWidgets import QWidget, QHeaderView, QFileDialog, QPushButton, QToolBar, QAction, QAbstractItemView
 from qgis.PyQt.QtXml import QDomDocument, QDomElement
 
 class QuickFeaturesWidget(QWidget):
@@ -73,6 +73,12 @@ class QuickFeaturesWidget(QWidget):
 
         # Set row height
         self.table_view.verticalHeader().setDefaultSectionSize(30)
+
+        # Disable native row selection: it would highlight a row on any click
+        # within it (e.g. picking a layer), regardless of whether the
+        # template is actually active. Whether a template is active is
+        # already indicated by its own checkbox + row background color.
+        self.table_view.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
 
         # Set table's model
         self.table_model = FeatureTemplateTableModel(parent=self)

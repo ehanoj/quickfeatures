@@ -50,7 +50,10 @@
      <item>
       <widget class="QLabel" name="info_label">
        <property name="text">
-        <string>Attribute values are stored as expressions and must be formatted accordingly. For example, strings should be single-quoted.</string>
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Attribute values are stored as expressions and must be formatted accordingly. For example, strings should be single-quoted.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Example: 'abc' or 123&lt;/b&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       </property>
+       <property name="textFormat">
+        <enum>Qt::RichText</enum>
        </property>
        <property name="wordWrap">
         <bool>true</bool>

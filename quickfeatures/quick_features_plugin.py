@@ -23,7 +23,7 @@ class QuickFeaturesPlugin:
         # Load Dock Widget
         self.dock_widget = QDockWidget(__title__, self.iface.mainWindow())
         self.dock_widget.setWidget(QuickFeaturesWidget(self.iface.mainWindow()))
-        self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dock_widget)
+        self.iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.dock_widget)
 
     def unload(self):
 

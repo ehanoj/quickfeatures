@@ -9,7 +9,7 @@ from typing import Dict
 from qgis.core import QgsVectorLayer, QgsMessageLog, Qgis
 
 # PyQt
-from qgis.PyQt.QtCore import Qt, QModelIndex, QVariant, QAbstractTableModel, pyqtSlot
+from qgis.PyQt.QtCore import Qt, QModelIndex, QAbstractTableModel, pyqtSlot
 from qgis.PyQt.QtWidgets import QStyledItemDelegate, QLineEdit
 from qgis.PyQt.QtGui import QColor
 
@@ -24,8 +24,8 @@ class DefaultValueOptionTableModel(QAbstractTableModel):
         super().__init__(parent)
         self.default_values_options = []
 
-    def headerData(self, section, orientation, role=Qt.DisplayRole):
-        if orientation == Qt.Horizontal and role == Qt.DisplayRole:
+    def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
+        if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
             return self.header_labels[section]
         return super().headerData(section, orientation, role)
 
@@ -35,10 +35,10 @@ class DefaultValueOptionTableModel(QAbstractTableModel):
     def columnCount(self, index=QModelIndex(), **kwargs) -> int:
         return len(self.header_labels)
 
-    def data(self, index, role=Qt.DisplayRole):
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
 
         if not index.isValid():
-            return QVariant()
+            return None
 
         row = index.row()
         default_val = self.default_values_options[row]
@@ -46,18 +46,18 @@ class DefaultValueOptionTableModel(QAbstractTableModel):
         column = index.column()
         column_header_label = self.header_labels[column]
 
-        if role == Qt.CheckStateRole:
+        if role == Qt.ItemDataRole.CheckStateRole:
             if column_header_label == "Select":
                 if default_val.is_selected():
-                    return Qt.Checked
+                    return Qt.CheckState.Checked
                 else:
-                    return Qt.Unchecked
+                    return Qt.CheckState.Unchecked
 
-        if role == Qt.DisplayRole:
+        if role == Qt.ItemDataRole.DisplayRole:
             if column_header_label == "Field":
                 return default_val.get_name()
 
-        if role == Qt.ForegroundRole:
+        if role == Qt.ItemDataRole.ForegroundRole:
             if column_header_label == "Field":
                 if not default_val.is_valid():
                     return QColor(180, 180, 180)
@@ -65,7 +65,7 @@ class DefaultValueOptionTableModel(QAbstractTableModel):
     def flags(self, index):
 
         if not index.isValid():
-            return Qt.NoItemFlags
+            return Qt.ItemFlag.NoItemFlags
 
         row = index.row()
         default_val = self.default_values_options[row]
@@ -74,16 +74,16 @@ class DefaultValueOptionTableModel(QAbstractTableModel):
         column_header_label = self.header_labels[col]
 
         if column_header_label == 'Select':
-            return Qt.ItemIsEnabled | Qt.ItemIsUserCheckable
+            return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsUserCheckable
         elif column_header_label == 'Field':
-            return Qt.ItemIsEnabled
+            return Qt.ItemFlag.ItemIsEnabled
         elif column_header_label == 'Value':
-            return Qt.ItemIsEnabled | Qt.ItemIsEditable
+            return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsEditable
         else:
-            return Qt.ItemIsEnabled
+            return Qt.ItemFlag.ItemIsEnabled
 
 
-    def setData(self, index, value, role=Qt.EditRole):
+    def setData(self, index, value, role=Qt.ItemDataRole.EditRole):
 
         if not index.isValid():
             return False
@@ -96,11 +96,11 @@ class DefaultValueOptionTableModel(QAbstractTableModel):
 
         # QgsMessageLog.logMessage(f"setData: header '{column_header_label}', row: '{row}', value: '{value}'", tag=__title__, level=Qgis.Info)
 
-        if column_header_label == 'Select' and role == Qt.CheckStateRole:
+        if column_header_label == 'Select' and role == Qt.ItemDataRole.CheckStateRole:
             default_value_option.toggle_selected()
             return True
 
-        if column_header_label == 'Value' and role == Qt.EditRole:
+        if column_header_label == 'Value' and role == Qt.ItemDataRole.EditRole:
             default_value_option.set_value(value)
             return True
 

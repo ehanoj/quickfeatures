@@ -18,8 +18,8 @@ tracker=https://github.com/andrew-plowright/quickfeatures/issues
 deprecated=False
 experimental=True
 qgisMinimumVersion=3.22
-qgisMaximumVersion=3.99
+qgisMaximumVersion=4.99
 
 # versionnement
-version=0.1.0
-changelog=
+version=0.2.0
+changelog=Refactoring for QGIS 4.2

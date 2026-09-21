@@ -11,9 +11,10 @@ import json
 # qgis
 from qgis.gui import QgsMapLayerComboBox
 from qgis.core import QgsProject, QgsMapLayerProxyModel, QgsMessageLog, Qgis, QgsVectorLayer
+from qgis.utils import iface
 
 # PyQt
-from qgis.PyQt.QtCore import QModelIndex, Qt, QAbstractTableModel, QVariant, QSize, pyqtSlot
+from qgis.PyQt.QtCore import QModelIndex, Qt, QAbstractTableModel, QSize, pyqtSlot
 from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtWidgets import QItemDelegate, QStyledItemDelegate, QDialog, QPushButton
 from qgis.PyQt.QtXml import QDomElement
@@ -34,10 +35,9 @@ class FeatureTemplateTableModel(QAbstractTableModel):
         super().__init__(parent)
 
         self.templates = []
-        self.highlight_brush = parent.palette().highlight()
 
-    def headerData(self, section, orientation, role=Qt.DisplayRole):
-        if orientation == Qt.Horizontal and role == Qt.DisplayRole:
+    def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
+        if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
             header_name = self.header_labels[section]
             if header_name == 'Active':
                 return None
@@ -51,38 +51,34 @@ class FeatureTemplateTableModel(QAbstractTableModel):
     def columnCount(self, index=QModelIndex(), **kwargs) -> int:
         return len(self.header_labels)
 
-    def data(self, index, role=Qt.DisplayRole):
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
         if not index.isValid():
-            return QVariant()
+            return None
 
         row = index.row()
         column = index.column()
         column_header_label = self.header_labels[column]
 
         if row >= len(self.templates):
-            return QVariant()
+            return None
 
         template = self.templates[row]
 
-        if role == Qt.DisplayRole:
+        if role == Qt.ItemDataRole.DisplayRole:
             if column_header_label == "Name":
                 return template.get_name()
 
             elif column_header_label == "Shortcut":
                 return template.get_shortcut_str()
 
-        if role == Qt.CheckStateRole:
+        if role == Qt.ItemDataRole.CheckStateRole:
             if column_header_label == "Active":
                 if template.is_active():
-                    return Qt.Checked
+                    return Qt.CheckState.Checked
                 else:
-                    return Qt.Unchecked
+                    return Qt.CheckState.Unchecked
 
-        if role == Qt.BackgroundRole:
-            if template.is_active():
-                return self.highlight_brush
-
-        if role == Qt.ForegroundRole:
+        if role == Qt.ItemDataRole.ForegroundRole:
             if not template.is_valid():
                 return QColor(180, 180, 180)
 
@@ -92,27 +88,27 @@ class FeatureTemplateTableModel(QAbstractTableModel):
 
     def flags(self, index):
         if not index.isValid():
-            return Qt.NoItemFlags
+            return Qt.ItemFlag.NoItemFlags
 
         column_header_label = self.header_labels[index.column()]
 
         if column_header_label == 'Active':
-            return Qt.ItemIsEnabled | Qt.ItemIsUserCheckable
+            return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsUserCheckable
         else:
-            return Qt.ItemIsEnabled | Qt.ItemIsEditable
+            return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsEditable
 
-    def setData(self, index, value, role=Qt.EditRole):
+    def setData(self, index, value, role=Qt.ItemDataRole.EditRole):
         if not index.isValid():
             return False
 
         column_header_label = self.header_labels[index.column()]
         template = self.templates[index.row()]
 
-        if column_header_label == 'Active' and role == Qt.CheckStateRole:
+        if column_header_label == 'Active' and role == Qt.ItemDataRole.CheckStateRole:
             template.toggle_active()
             return True
 
-        if column_header_label == 'Layer' and role == Qt.EditRole:
+        if column_header_label == 'Layer' and role == Qt.ItemDataRole.EditRole:
             template.set_map_lyr(value)
             self.dataChanged.emit(index, index)
             return True
@@ -150,20 +146,34 @@ class FeatureTemplateTableModel(QAbstractTableModel):
     @pyqtSlot()
     def refresh_template(self) -> None:
         # QgsMessageLog.logMessage(f"Loaded map layer '{self.sender()}'", tag=__title__, level=Qgis.Info)
-        row = self.templates.index(self.sender())
 
-        index1 = self.createIndex(row, 0)
-        index2 = self.createIndex(row, self.columnCount())
-
-        self.dataChanged.emit(index1, index2)
+        # Refresh the WHOLE table (not just the row that changed). When one
+        # template is activated, a sibling is deactivated in the same call
+        # chain, so it's simplest and most robust to just repaint everything
+        # rather than track exact per-row ranges across nested signals.
+        if self.rowCount() > 0:
+            top_left = self.createIndex(0, 0)
+            bottom_right = self.createIndex(self.rowCount() - 1, self.columnCount() - 1)
+            self.dataChanged.emit(top_left, bottom_right)
 
     @pyqtSlot()
     def deactivate_other_templates(self) -> None:
         template = self.sender()
 
         for row in range(len(self.templates)):
-            if not self.templates[row] == template:
-                self.templates[row].set_active(False)
+            other = self.templates[row]
+            if other == template:
+                continue
+            if not other.is_active():
+                continue
+            try:
+                other.set_active(False)
+            except Exception as e:
+                # Never let a failure on one template (e.g. a stale field
+                # reference) abort deactivation of the remaining templates.
+                QgsMessageLog.logMessage(
+                    f"Could not deactivate template '{other.log_id()}': {e}",
+                    tag=__title__, level=Qgis.Critical)
 
     def remove_template(self, template: FeatureTemplate) -> None:
         try:
@@ -206,10 +216,38 @@ class FeatureTemplateTableModel(QAbstractTableModel):
 
         qgs_project = QgsProject().instance()
 
-        with open(path) as f:
-            data = json.load(f)
+        try:
+            with open(path, encoding='utf-8') as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            iface.messageBar().pushMessage(
+                "Quick Features",
+                f"Soubor '{path.name}' se nepodařilo přečíst jako JSON: {e}",
+                level=Qgis.Critical
+            )
+            return
 
-        for d in data:
+        if not isinstance(data, list) or not all(isinstance(item, dict) for item in data):
+            iface.messageBar().pushMessage(
+                "Quick Features",
+                f"Soubor '{path.name}' nemá formát šablon Quick Features "
+                "(očekává se seznam objektů uložený tlačítkem 'Save templates').",
+                level=Qgis.Warning
+            )
+            return
+
+        required_keys = {'name', 'map_lyr_name', 'default_values', 'shortcut_str'}
+
+        for i, d in enumerate(data):
+            missing_keys = required_keys - d.keys()
+            if missing_keys:
+                iface.messageBar().pushMessage(
+                    "Quick Features",
+                    f"Soubor '{path.name}': položka č. {i + 1} postrádá klíče {sorted(missing_keys)}, přeskočena.",
+                    level=Qgis.Warning
+                )
+                continue
+
             map_lyr = vector_lyr_by_name(qgs_project, d['map_lyr_name'])
 
             template = FeatureTemplate(parent=self, widget=self.parent(), name=d['name'],
@@ -325,20 +363,27 @@ class DefaultValueDelegate(QItemDelegate):
         return editor
 
     def setEditorData(self, editor, index):
-        # This is a bit of a hack, but the editor's data is getting populated in
-        # 'init_diolog' instead, given that I want this to happen every time
-        # the button is clicked
-        ...
+        # The button's own data is populated in 'init_dialog' instead, given
+        # that I want this to happen every time the button is clicked.
+        # This method is however still called by the view whenever the
+        # model's data changes (e.g. dataChanged from refresh_template), so
+        # we use it to tint the button red when the template is invalid -
+        # i.e. its stored attribute fields no longer match the selected layer.
+        template = index.model().templates[index.row()]
+        if template.has_attribute_mismatch():
+            editor.setStyleSheet("QPushButton { background-color: #e05c5c; }")
+        else:
+            editor.setStyleSheet("")
 
     def setModelData(self, editor, model, index):
 
         # Only set model data if dialog was accepted
-        if editor.dialog.result() == QDialog.Accepted:
+        if editor.dialog.result() == QDialog.DialogCode.Accepted:
             data = editor.dialog.get_editor_default_values()
             model.setData(index, data)
 
             # Reset result of dialog
-            editor.dialog.setResult(QDialog.Rejected)
+            editor.dialog.setResult(QDialog.DialogCode.Rejected)
 
     # Populate the dialog and then open it`
     def init_dialog(self, editor, index):

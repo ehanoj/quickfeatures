@@ -33,7 +33,7 @@ class DefaultValueEditor(QDialog):
         self.info_icon.show()
 
         # Set modality
-        self.setWindowModality(Qt.ApplicationModal)
+        self.setWindowModality(Qt.WindowModality.ApplicationModal)
 
         # Initialize table
         self.table_model = None
@@ -44,7 +44,7 @@ class DefaultValueEditor(QDialog):
         self.cancel_button.clicked.connect(self.reject)
 
     def showEvent(self, event):
-        self.resize(380, 250)
+        self.resize(380, 280)
 
         # Show the dialog at the current mouse position
         geom = self.frameGeometry()
