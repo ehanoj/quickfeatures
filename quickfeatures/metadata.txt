@@ -21,5 +21,5 @@ qgisMinimumVersion=3.22
 qgisMaximumVersion=4.99
 
 # versionnement
-version=0.2.0
-changelog=Refactoring for QGIS 4.2
+version=0.2.1
+changelog=Fix position remmember of plugin panel after QGIS quit
