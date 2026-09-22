@@ -22,6 +22,13 @@ class QuickFeaturesPlugin:
 
         # Load Dock Widget
         self.dock_widget = QDockWidget(__title__, self.iface.mainWindow())
+
+        # A stable objectName is required for QGIS/Qt to remember this dock
+        # widget's position, size and floating state between sessions
+        # (QMainWindow.saveState()/restoreState() key dock widgets by their
+        # objectName - without one, it always resets to a default position).
+        self.dock_widget.setObjectName("QuickFeaturesDockWidget")
+
         self.dock_widget.setWidget(QuickFeaturesWidget(self.iface.mainWindow()))
         self.iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.dock_widget)
 
